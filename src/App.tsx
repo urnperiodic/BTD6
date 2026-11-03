@@ -13,6 +13,7 @@ import { PvEView } from './components/PvEView';
 import { PvPView } from './components/PvPView';
 import { BloonIcon, TowerPortraitIcon } from './components/GameIcons';
 import { CANVAS_HEIGHT, CANVAS_WIDTH, renderGameScene } from './engine/simEngine';
+import { createMultiplayerSocket } from './utils/multiplayerTransport';
 import {
   Bot,
   Check,
@@ -141,50 +142,46 @@ export default function App() {
     return payload;
   };
 
-  // Connect WebSocket for 6-Digit Party PvP
-  const ensureWebSocket = (): Promise<WebSocket> => {
-    return new Promise((resolve, reject) => {
-      if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
-        resolve(wsRef.current);
-        return;
-      }
-      const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-      const ws = new WebSocket(`${proto}//${window.location.host}/ws`);
-      wsRef.current = ws;
+  // Connect Multiplayer Socket (WebSocket on Node server, or Serverless WebRTC P2P on GitHub Pages)
+  const ensureWebSocket = async (): Promise<WebSocket> => {
+    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+      return wsRef.current;
+    }
+    const ws = await createMultiplayerSocket();
+    wsRef.current = ws;
 
-      ws.onopen = () => resolve(ws);
-      ws.onerror = (err) => reject(err);
-      ws.onmessage = (ev) => {
-        try {
-          const msg = JSON.parse(ev.data);
-          if (msg.type === 'party_created' || msg.type === 'party_updated') {
-            setActivePartyRoom(msg.room);
-            setPartyStatusMsg(null);
-          } else if (msg.type === 'draft_started') {
-            setActivePartyRoom(msg.room);
-            setMyDraftLocked(false);
-            setPartyStatusMsg(null);
-            setHubTab('pvp');
-          } else if (msg.type === 'party_error') {
-            setPartyStatusMsg(msg.message || 'Party error');
-          } else if (msg.type === 'match_started') {
-            setActivePartyRoom(msg.room);
-            const winMap = msg.winningMapId || msg.room?.mapId;
-            if (winMap) setSelectedPvPMapId(winMap);
-            setMyDraftLocked(false);
-            setAiDraftPhase(false);
-            setPvpIsAiPractice(false);
-            setActiveView('pvp_play');
-          } else if (msg.type === 'player_left') {
-            setActivePartyRoom(msg.room);
-            setMyDraftLocked(false);
-            setPartyStatusMsg('Other player left the party.');
-          }
-        } catch (e) {
-          console.error(e);
+    ws.onmessage = (ev) => {
+      try {
+        const msg = JSON.parse(ev.data);
+        if (msg.type === 'party_created' || msg.type === 'party_updated') {
+          setActivePartyRoom(msg.room);
+          setPartyStatusMsg(null);
+        } else if (msg.type === 'draft_started') {
+          setActivePartyRoom(msg.room);
+          setMyDraftLocked(false);
+          setPartyStatusMsg(null);
+          setHubTab('pvp');
+        } else if (msg.type === 'party_error') {
+          setPartyStatusMsg(msg.message || 'Party error');
+        } else if (msg.type === 'match_started') {
+          setActivePartyRoom(msg.room);
+          const winMap = msg.winningMapId || msg.room?.mapId;
+          if (winMap) setSelectedPvPMapId(winMap);
+          setMyDraftLocked(false);
+          setAiDraftPhase(false);
+          setPvpIsAiPractice(false);
+          setActiveView('pvp_play');
+        } else if (msg.type === 'player_left') {
+          setActivePartyRoom(msg.room);
+          setMyDraftLocked(false);
+          setPartyStatusMsg('Other player left the party.');
         }
-      };
-    });
+      } catch (e) {
+        console.error(e);
+      }
+    };
+
+    return ws;
   };
 
   const handleCreateSixDigitParty = async () => {
