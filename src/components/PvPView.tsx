@@ -153,6 +153,18 @@ export const PvPView: React.FC<PvPViewProps> = ({
   const sendFortifiedRef = useRef<boolean>(sendFortified);
   sendFortifiedRef.current = sendFortified;
 
+  const selectedShopSpecIdRef = useRef<string | null>(selectedShopSpecId);
+  selectedShopSpecIdRef.current = selectedShopSpecId;
+  const selectedTowerIdRef = useRef<string | null>(selectedTowerId);
+  selectedTowerIdRef.current = selectedTowerId;
+
+  const bloonBoostTimerRef = useRef<number>(bloonBoostTimer);
+  bloonBoostTimerRef.current = bloonBoostTimer;
+  const towerBoostTimerRef = useRef<number>(towerBoostTimer);
+  towerBoostTimerRef.current = towerBoostTimer;
+  const oppTowerBoostTimerRef = useRef<number>(0);
+  const oppBloonBoostTimerRef = useRef<number>(0);
+
   const hoverPointRef = useRef<Point | null>(null);
   const fullDeckIds = [playerHero, ...playerLoadout];
 
@@ -163,7 +175,28 @@ export const PvPView: React.FC<PvPViewProps> = ({
     }, 2400);
   };
 
-  // Listen to WebSocket events when in a real 6-digit Party match
+  // Immediately broadcast our board state to our opponent (called on tower actions & periodically)
+  const broadcastBoardSync = (overrideTowers?: PlacedTower[]) => {
+    if (isAiPractice || !wsRef?.current || wsRef.current.readyState !== WebSocket.OPEN) return;
+    const activeTowers = overrideTowers ?? towersRef.current;
+    wsRef.current.send(
+      JSON.stringify({
+        type: 'board_sync',
+        lives: livesRef.current,
+        cash: cashRef.current,
+        eco: ecoRef.current,
+        round: roundRef.current,
+        towers: activeTowers,
+        bloons: playerBloonsRef.current.slice(0, 120),
+        activeBoosts: {
+          towerBoost: towerBoostTimerRef.current > 0,
+          bloonBoost: bloonBoostTimerRef.current > 0,
+        },
+      })
+    );
+  };
+
+  // Listen to WebSocket / P2P events when in a real 6-digit Party match
   useEffect(() => {
     if (isAiPractice || !wsRef?.current) return;
     const ws = wsRef.current;
@@ -175,10 +208,16 @@ export const PvPView: React.FC<PvPViewProps> = ({
           const bType = msg.bloonType as BloonType;
           const cnt = Number(msg.count) || 1;
           const spacing = Number(msg.spacing) || 0.2;
-          if (typeof msg.senderEco === 'number') setOppEco(msg.senderEco);
-          if (typeof msg.senderCash === 'number') setOppCash(msg.senderCash);
+          if (typeof msg.senderEco === 'number') {
+            oppEcoRef.current = msg.senderEco;
+            setOppEco(msg.senderEco);
+          }
+          if (typeof msg.senderCash === 'number') {
+            oppCashRef.current = msg.senderCash;
+            setOppCash(msg.senderCash);
+          }
 
-          // Spawn incoming opponent rush on Player's Left Canvas (NOT shown in middle bar, as middle bar ONLY shows bloons YOU send!)
+          // Spawn incoming opponent rush on Player's Left Canvas
           for (let i = 0; i < cnt; i++) {
             setTimeout(() => {
               if (playerBloonsRef.current.length < 450) {
@@ -193,14 +232,43 @@ export const PvPView: React.FC<PvPViewProps> = ({
             }, i * spacing * 1000);
           }
         } else if (msg.type === 'opponent_board_sync') {
-          if (typeof msg.lives === 'number') setOppLives(msg.lives);
-          if (typeof msg.eco === 'number') setOppEco(msg.eco);
-          if (typeof msg.cash === 'number') setOppCash(msg.cash);
+          if (typeof msg.lives === 'number') {
+            oppLivesRef.current = msg.lives;
+            setOppLives(msg.lives);
+          }
+          if (typeof msg.eco === 'number') {
+            oppEcoRef.current = msg.eco;
+            setOppEco(msg.eco);
+          }
+          if (typeof msg.cash === 'number') {
+            oppCashRef.current = msg.cash;
+            setOppCash(msg.cash);
+          }
+          if (msg.activeBoosts && typeof msg.activeBoosts === 'object') {
+            oppTowerBoostTimerRef.current = msg.activeBoosts.towerBoost ? 1.0 : 0;
+            oppBloonBoostTimerRef.current = msg.activeBoosts.bloonBoost ? 1.0 : 0;
+          }
           if (Array.isArray(msg.towers)) {
-            setOppTowers(msg.towers);
+            // Merge with local oppTowersRef so existing towers preserve smooth firing cooldowns & turret angles
+            const prevMap = new Map<string, PlacedTower>(
+              oppTowersRef.current.map((t) => [t.id, t])
+            );
+            const mergedTowers: PlacedTower[] = (msg.towers as PlacedTower[]).map((incomingTw) => {
+              const existing = prevMap.get(incomingTw.id);
+              if (existing) {
+                return {
+                  ...incomingTw,
+                  angle: existing.angle,
+                  cooldownTimer: existing.cooldownTimer,
+                };
+              }
+              return { ...incomingTw };
+            });
+            oppTowersRef.current = mergedTowers;
+            setOppTowers(mergedTowers);
           }
           if (Array.isArray(msg.bloons)) {
-            oppBloonsRef.current = msg.bloons;
+            oppBloonsRef.current = (msg.bloons as ActiveBloon[]).map((b) => ({ ...b }));
           }
         } else if (msg.type === 'player_emote') {
           setActiveEmoteBubble({ who: 'opponent', emote: msg.emote });
@@ -223,6 +291,8 @@ export const PvPView: React.FC<PvPViewProps> = ({
     };
 
     ws.addEventListener('message', onMessage);
+    // Send initial board sync as soon as match starts
+    broadcastBoardSync();
     return () => ws.removeEventListener('message', onMessage);
   }, [isAiPractice, wsRef, map, playerId]);
 
@@ -242,7 +312,7 @@ export const PvPView: React.FC<PvPViewProps> = ({
               })
             );
           }
-          if (isAiPractice && oppBloonsRef.current.length < 450) {
+          if (oppBloonsRef.current.length < 450) {
             oppBloonsRef.current.push(
               createActiveBloon(grp.type, 0, 0, map, {
                 camo: grp.camo,
@@ -347,7 +417,7 @@ export const PvPView: React.FC<PvPViewProps> = ({
           sendDrainTimer += dt;
           if (sendDrainTimer >= head.sendSpec.spacing) {
             sendDrainTimer = 0;
-            if (isAiPractice && oppBloonsRef.current.length < 450) {
+            if (oppBloonsRef.current.length < 450) {
               oppBloonsRef.current.push(
                 createActiveBloon(head.sendSpec.bloonType, 0, 0, map, {
                   camo: head.camo,
@@ -404,8 +474,12 @@ export const PvPView: React.FC<PvPViewProps> = ({
           spawnNaturalWaveOnBothBoards(nextR);
         }
 
-        if (bloonBoostTimer > 0) setBloonBoostTimer((t) => Math.max(0, t - dt));
-        if (towerBoostTimer > 0) setTowerBoostTimer((t) => Math.max(0, t - dt));
+        if (bloonBoostTimerRef.current > 0) {
+          bloonBoostTimerRef.current = Math.max(0, bloonBoostTimerRef.current - dt);
+        }
+        if (towerBoostTimerRef.current > 0) {
+          towerBoostTimerRef.current = Math.max(0, towerBoostTimerRef.current - dt);
+        }
 
         // 5. Step Player Simulation (Left Canvas)
         const pRes = stepGameSimulation(
@@ -418,8 +492,8 @@ export const PvPView: React.FC<PvPViewProps> = ({
             removedObstacleIds: [],
             round: roundRef.current,
             speedMultiplier: 1.0,
-            bloonBoostActive: false,
-            towerBoostActive: towerBoostTimer > 0,
+            bloonBoostActive: oppBloonBoostTimerRef.current > 0,
+            towerBoostActive: towerBoostTimerRef.current > 0,
             envTimer: pEnvTimer,
           },
           dt,
@@ -446,26 +520,27 @@ export const PvPView: React.FC<PvPViewProps> = ({
           }
         }
 
-        // 6. Step Opponent Simulation (Right Canvas)
+        // 6. Step Opponent Simulation (Right Canvas) at 60FPS in BOTH AI Practice and 1v1 Multiplayer!
+        const oRes = stepGameSimulation(
+          {
+            map,
+            towers: oppTowersRef.current,
+            bloons: oppBloonsRef.current,
+            projectiles: oppProjRef.current,
+            effects: oppFxRef.current,
+            removedObstacleIds: [],
+            round: roundRef.current,
+            speedMultiplier: 1.0,
+            bloonBoostActive: bloonBoostTimerRef.current > 0,
+            towerBoostActive: oppTowerBoostTimerRef.current > 0,
+            envTimer: oEnvTimer,
+          },
+          dt,
+          false
+        );
+        oEnvTimer = oRes.newEnvTimer;
+
         if (isAiPractice) {
-          const oRes = stepGameSimulation(
-            {
-              map,
-              towers: oppTowersRef.current,
-              bloons: oppBloonsRef.current,
-              projectiles: oppProjRef.current,
-              effects: oppFxRef.current,
-              removedObstacleIds: [],
-              round: roundRef.current,
-              speedMultiplier: 1.0,
-              bloonBoostActive: bloonBoostTimer > 0,
-              towerBoostActive: false,
-              envTimer: oEnvTimer,
-            },
-            dt,
-            false
-          );
-          oEnvTimer = oRes.newEnvTimer;
           pendingOppCash += oRes.cashEarned;
 
           if (oRes.livesLost > 0) {
@@ -486,27 +561,20 @@ export const PvPView: React.FC<PvPViewProps> = ({
             runAiDecisionTick();
           }
         } else {
+          // Real-time 1v1 Multiplayer Sync (~7Hz continuous + immediate on tower actions)
           wsSyncTimer += dt;
-          if (wsSyncTimer >= 0.35 && wsRef?.current?.readyState === WebSocket.OPEN) {
+          if (wsSyncTimer >= 0.15) {
             wsSyncTimer = 0;
-            wsRef.current.send(
-              JSON.stringify({
-                type: 'board_sync',
-                lives: livesRef.current,
-                cash: cashRef.current,
-                eco: ecoRef.current,
-                round: roundRef.current,
-                towers: towersRef.current,
-                bloons: playerBloonsRef.current.slice(0, 45),
-              })
-            );
+            broadcastBoardSync();
           }
         }
 
-        // Throttled HUD Cash Sync (10Hz) so React never slows down dense waves
+        // Throttled HUD Cash & Boost Sync (10Hz) so React never slows down dense waves
         hudSyncTimer += dt;
         if (hudSyncTimer >= 0.1) {
           hudSyncTimer = 0;
+          setBloonBoostTimer(bloonBoostTimerRef.current);
+          setTowerBoostTimer(towerBoostTimerRef.current);
           if (pendingPlayerCash > 0) {
             cashRef.current += pendingPlayerCash;
             pendingPlayerCash = 0;
@@ -532,8 +600,8 @@ export const PvPView: React.FC<PvPViewProps> = ({
             playerProjRef.current,
             playerFxRef.current,
             {
-              selectedTowerId,
-              placingTowerSpecId: selectedShopSpecId,
+              selectedTowerId: selectedTowerIdRef.current,
+              placingTowerSpecId: selectedShopSpecIdRef.current,
               hoverPoint: hoverPointRef.current,
               timeSec: now / 1000,
             }
@@ -564,7 +632,7 @@ export const PvPView: React.FC<PvPViewProps> = ({
 
     animId = requestAnimationFrame(loop);
     return () => cancelAnimationFrame(animId);
-  }, [map, isAiPractice, selectedTowerId, selectedShopSpecId, bloonBoostTimer, towerBoostTimer]);
+  }, [map, isAiPractice]);
 
   const runAiDecisionTick = () => {
     const aiCash = oppCashRef.current;
@@ -698,9 +766,12 @@ export const PvPView: React.FC<PvPViewProps> = ({
       soundFX.playPlaceTower();
       cashRef.current -= spec.cost;
       setCash(cashRef.current);
-      setTowers((prev) => [...prev, newTower]);
+      const nextTowers = [...towersRef.current, newTower];
+      towersRef.current = nextTowers;
+      setTowers(nextTowers);
       setSelectedShopSpecId(null);
       setSelectedTowerId(newTower.id);
+      broadcastBoardSync(nextTowers);
       return;
     }
 
@@ -721,27 +792,34 @@ export const PvPView: React.FC<PvPViewProps> = ({
     soundFX.playUpgrade();
     cashRef.current -= cost;
     setCash(cashRef.current);
-    setTowers((prev) =>
-      prev.map((t) => {
-        if (t.id !== towerId) return t;
-        const nextTiers: [number, number, number] = [...t.tiers] as [number, number, number];
-        nextTiers[pathIndex] += 1;
-        return { ...t, tiers: nextTiers, totalSpent: t.totalSpent + cost };
-      })
-    );
+    const nextTowers = towersRef.current.map((t) => {
+      if (t.id !== towerId) return t;
+      const nextTiers: [number, number, number] = [...t.tiers] as [number, number, number];
+      nextTiers[pathIndex] += 1;
+      return { ...t, tiers: nextTiers, totalSpent: t.totalSpent + cost };
+    });
+    towersRef.current = nextTowers;
+    setTowers(nextTowers);
+    broadcastBoardSync(nextTowers);
   };
 
   const handleSellTower = (towerId: string, refund: number) => {
     cashRef.current += refund;
     setCash(cashRef.current);
-    setTowers((prev) => prev.filter((t) => t.id !== towerId));
+    const nextTowers = towersRef.current.filter((t) => t.id !== towerId);
+    towersRef.current = nextTowers;
+    setTowers(nextTowers);
     setSelectedTowerId(null);
+    broadcastBoardSync(nextTowers);
   };
 
   const handleChangePriority = (towerId: string, priority: TargetPriority) => {
-    setTowers((prev) =>
-      prev.map((t) => (t.id === towerId ? { ...t, targetPriority: priority } : t))
+    const nextTowers = towersRef.current.map((t) =>
+      t.id === towerId ? { ...t, targetPriority: priority } : t
     );
+    towersRef.current = nextTowers;
+    setTowers(nextTowers);
+    broadcastBoardSync(nextTowers);
   };
 
   const selectedTower = towers.find((t) => t.id === selectedTowerId) || null;
@@ -874,9 +952,11 @@ export const PvPView: React.FC<PvPViewProps> = ({
           <div className="pt-2 grid grid-cols-2 gap-1.5">
             <button
               onClick={() => {
-                if (bloonBoostCharges <= 0 || bloonBoostTimer > 0) return;
+                if (bloonBoostCharges <= 0 || bloonBoostTimerRef.current > 0) return;
                 setBloonBoostCharges((c) => c - 1);
+                bloonBoostTimerRef.current = 10;
                 setBloonBoostTimer(10);
+                broadcastBoardSync();
                 showToast('Bloon Boost Activated! Sent bloons move 30% faster!');
               }}
               disabled={bloonBoostCharges <= 0}
@@ -891,10 +971,12 @@ export const PvPView: React.FC<PvPViewProps> = ({
 
             <button
               onClick={() => {
-                if (towerBoostCharges <= 0 || towerBoostTimer > 0) return;
+                if (towerBoostCharges <= 0 || towerBoostTimerRef.current > 0) return;
                 setTowerBoostCharges((c) => c - 1);
+                towerBoostTimerRef.current = 10;
                 setTowerBoostTimer(10);
                 soundFX.playUpgrade();
+                broadcastBoardSync();
                 showToast('Tower Boost Activated! Monkeys attack 40% faster!');
               }}
               disabled={towerBoostCharges <= 0}
