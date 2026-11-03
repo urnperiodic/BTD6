@@ -1,0 +1,66 @@
+@import "tailwindcss";
+
+@layer base {
+  body {
+    font-family: 'Outfit', system-ui, -apple-system, sans-serif;
+    background-color: #16120e;
+    color: #f8fafc;
+    overflow-x: hidden;
+    user-select: none;
+  }
+
+  h1, h2, h3, .font-display {
+    font-family: 'Fredoka', 'Outfit', sans-serif;
+  }
+
+  .font-mono-num {
+    font-family: 'JetBrains Mono', monospace;
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+/* Custom scrollbars for tower and bloon panels */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: rgba(38, 22, 12, 0.5);
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(210, 133, 91, 0.7);
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(235, 158, 112, 0.9);
+}
+
+.wood-panel {
+  background: linear-gradient(180deg, #b86b43 0%, #9a5430 100%);
+  border: 3px solid #6b3518;
+  box-shadow: inset 0 2px 0 rgba(255, 214, 186, 0.35), 0 4px 12px rgba(0, 0, 0, 0.45);
+}
+
+.wood-panel-dark {
+  background: linear-gradient(180deg, #8c4b2b 0%, #69341a 100%);
+  border: 2px solid #4a210d;
+  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.45);
+}
+
+.btd-text-stroke {
+  text-shadow:
+    -1.5px -1.5px 0 #1e130c,
+     1.5px -1.5px 0 #1e130c,
+    -1.5px  1.5px 0 #1e130c,
+     1.5px  1.5px 0 #1e130c,
+     0px    2.5px 0 #1e130c;
+}
+
+.btd-text-stroke-sm {
+  text-shadow:
+    -1px -1px 0 #1e130c,
+     1px -1px 0 #1e130c,
+    -1px  1px 0 #1e130c,
+     1px  1px 0 #1e130c,
+     0px  1.5px 0 #1e130c;
+}

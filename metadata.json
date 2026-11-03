@@ -1,0 +1,6 @@
+{
+  "name": "Bloons TD: Battles & Odyssey",
+  "description": "A 2D tower defense game combining Bloons TD Battles 2 real-time WebSocket PvP party matches and AI battles with Bloons TD 6 PvE campaigns, Boss Bloons, Sandbox admin controls, cross-device save files, and a custom Map Editor.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
