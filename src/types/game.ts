@@ -159,6 +159,7 @@ export interface UpgradeTierSpec {
 export interface TowerSpec {
   id: string;
   name: string;
+  shortName?: string;
   category: 'Hero' | 'Primary' | 'Military' | 'Magic' | 'Support';
   cost: number;
   range: number;
@@ -173,6 +174,7 @@ export interface TowerSpec {
   waterOnly: boolean;
   isPlatform?: boolean; // e.g. Pontoon allows land towers on water
   footprintRadius: number;
+  splashRadius?: number;
   incomePerRound?: number;
   continuousIncomePerSec?: number;
   spawnsTrackSpikes?: boolean;

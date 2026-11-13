@@ -120,6 +120,25 @@ class SoundManager {
     osc.start();
     osc.stop(ctx.currentTime + 0.37);
   }
+
+  playEcoPayout() {
+    const ctx = this.ensureContext();
+    if (!ctx) return;
+
+    [587.33, 880].forEach((freq, idx) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'sine';
+      const t = ctx.currentTime + idx * 0.05;
+      osc.frequency.setValueAtTime(freq, t);
+      gain.gain.setValueAtTime(0.06, t);
+      gain.gain.exponentialRampToValueAtTime(0.001, t + 0.14);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start(t);
+      osc.stop(t + 0.15);
+    });
+  }
 }
 
 export const soundFX = new SoundManager();

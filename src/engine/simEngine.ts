@@ -249,7 +249,7 @@ export function computeTowerStats(
   let projectilesCount = spec.projectilesCount;
   let damageType: DamageType = spec.damageType;
   let canDetectCamo = spec.canDetectCamo;
-  let splashRadius = 0;
+  let splashRadius = spec.splashRadius || 0;
   let slowAmount = 0;
   let stripCamoRegrow = false;
   let incomePerRound = spec.incomePerRound || 0;

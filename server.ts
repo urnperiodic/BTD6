@@ -391,6 +391,21 @@ async function startServer() {
             break;
           }
 
+          case 'speed_change': {
+            const spd = [1, 2, 3].includes(Number(msg.speed)) ? Number(msg.speed) : 1;
+            broadcastToRoom(
+              room,
+              {
+                type: 'match_speed_changed',
+                fromPlayerId: currentPlayerId,
+                playerName: sender.name,
+                speed: spd,
+              },
+              currentPlayerId
+            );
+            break;
+          }
+
           case 'match_over': {
             room.status = 'finished';
             broadcastToRoom(room, {

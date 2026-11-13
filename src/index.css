@@ -64,3 +64,46 @@
      1px  1px 0 #1e130c,
      0px  1.5px 0 #1e130c;
 }
+
+@keyframes ecoFloatUp {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, 6px) scale(0.8);
+  }
+  18% {
+    opacity: 1;
+    transform: translate(-50%, -4px) scale(1.1);
+  }
+  75% {
+    opacity: 1;
+    transform: translate(-50%, -22px) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -34px) scale(0.92);
+  }
+}
+
+@keyframes ecoPulseGlow {
+  0% {
+    transform: scale(1);
+    box-shadow: 0 0 0 0 rgba(74, 222, 128, 0.8);
+  }
+  40% {
+    transform: scale(1.09);
+    box-shadow: 0 0 16px 4px rgba(74, 222, 128, 0.75);
+  }
+  100% {
+    transform: scale(1);
+    box-shadow: 0 0 0 0 rgba(74, 222, 128, 0);
+  }
+}
+
+.animate-eco-float {
+  animation: ecoFloatUp 1.15s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+.animate-eco-pulse {
+  animation: ecoPulseGlow 0.55s ease-out;
+}
+

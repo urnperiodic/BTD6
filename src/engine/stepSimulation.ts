@@ -29,6 +29,7 @@ export interface SimStepState {
   bloonBoostActive: boolean;
   towerBoostActive: boolean;
   envTimer: number;
+  isPvP?: boolean;
 }
 
 export interface SimStepResult {
@@ -166,7 +167,8 @@ export function stepGameSimulation(
       tower.cooldownTimer -= dt;
       if (tower.cooldownTimer <= 0) {
         tower.cooldownTimer = 3.2;
-        const bonus = Math.max(15, Math.round(stats.incomePerRound * 0.12));
+        const rate = state.isPvP ? 0.16 : 0.09;
+        const bonus = Math.max(15, Math.round(stats.incomePerRound * rate));
         cashEarned += bonus;
         tower.cashGenerated += bonus;
         if (effects.length < 70) {
@@ -555,7 +557,7 @@ function applyDamageToBloon(
             : bloon.type === 'boss_vortex'
               ? 'rainbow'
               : 'lead';
-      const minionCount = minionType === 'moab' ? 2 : 5;
+      const minionCount = minionType === 'moab' ? 1 : minionType === 'ceramic' ? 3 : 4;
       for (let m = 0; m < minionCount; m++) {
         bloonsArray.push(
           createActiveBloon(
@@ -563,9 +565,23 @@ function applyDamageToBloon(
             bloon.pathIndex,
             Math.max(0, bloon.distance - m * 18 + 20),
             map,
-            { fortified: true, regrow: bloon.type === 'boss_lych', roundScale }
+            {
+              fortified: bloon.type === 'boss_dreadbloon',
+              regrow: bloon.type === 'boss_lych',
+              roundScale,
+            }
           )
         );
+      }
+      if (bloon.type === 'boss_lych') {
+        for (let m = 0; m < 2; m++) {
+          bloonsArray.push(
+            createActiveBloon('rainbow', bloon.pathIndex, Math.max(0, bloon.distance - m * 14), map, {
+              regrow: true,
+              roundScale,
+            })
+          );
+        }
       }
     }
   }

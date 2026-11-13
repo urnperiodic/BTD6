@@ -265,7 +265,7 @@ export const PvEView: React.FC<PvEViewProps> = ({
       hudSyncAccumulator += rawDt;
 
       if (towerBoostRef.current > 0) {
-        towerBoostRef.current = Math.max(0, towerBoostRef.current - rawDt);
+        towerBoostRef.current = Math.max(0, towerBoostRef.current - dt);
       }
 
       // Process wave spawn queue
@@ -293,8 +293,8 @@ export const PvEView: React.FC<PvEViewProps> = ({
         }
       }
 
-      // Step simulation (for 3x and 5x speed, sub-step in 2 chunks so fast projectiles never tunnel!)
-      const subSteps = speedMult >= 3 ? 2 : 1;
+      // Step simulation (sub-step at >= 2x speed so fast bloons/projectiles never tunnel!)
+      const subSteps = speedMult >= 2 ? Math.min(4, speedMult) : 1;
       const subDt = dt / subSteps;
 
       for (let s = 0; s < subSteps; s++) {
@@ -311,6 +311,7 @@ export const PvEView: React.FC<PvEViewProps> = ({
             bloonBoostActive: false,
             towerBoostActive: towerBoostRef.current > 0,
             envTimer: envTimerRef.current,
+            isPvP: false,
           },
           subDt,
           s === 0

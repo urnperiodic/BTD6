@@ -11,7 +11,7 @@ import {
   VisualEffect,
 } from '../types/game';
 import { PVP_BLOON_SENDS, generateRoundWaves } from '../data/bloons';
-import { TOWER_SPEC_MAP } from '../data/towers';
+import { TOWER_SPEC_MAP, getTowerShortName } from '../data/towers';
 import {
   canPlaceTowerAt,
   clientToLogicalCoords,
@@ -22,7 +22,7 @@ import { stepGameSimulation } from '../engine/stepSimulation';
 import { BloonIcon, TowerPortraitIcon } from './GameIcons';
 import { TowerUpgradePanel } from './TowerUpgradePanel';
 import { soundFX } from '../utils/sound';
-import { Flag, Lock, MessageSquare, Repeat, Skull } from 'lucide-react';
+import { FastForward, Flag, Lock, MessageSquare, Repeat, Skull } from 'lucide-react';
 
 interface PvPViewProps {
   map: GameMap;
@@ -47,7 +47,24 @@ interface QueuedBloonSendItem {
   fortified: boolean;
 }
 
+interface PendingBloonSpawn {
+  spawnAt: number;
+  type: BloonType;
+  camo?: boolean;
+  regrow?: boolean;
+  fortified?: boolean;
+}
+
+interface EcoPopupItem {
+  id: string;
+  text: string;
+  kind: 'eco' | 'payout' | 'loss';
+}
+
 const MAX_SEND_QUEUE_SLOTS = 7;
+const PVP_SPEED_OPTIONS = [1, 2, 3] as const;
+const ECO_INTERVAL_SEC = 5.0;
+const ROUND_INTERVAL_SEC = 15.0;
 
 export const PvPView: React.FC<PvPViewProps> = ({
   map,
@@ -63,14 +80,21 @@ export const PvPView: React.FC<PvPViewProps> = ({
 }) => {
   // Player State
   const [lives, setLives] = useState<number>(150);
-  const [cash, setCash] = useState<number>(650);
+  const [cash, setCash] = useState<number>(700);
   const [eco, setEco] = useState<number>(250);
   const [round, setRound] = useState<number>(1);
   const maxRound = 40;
+  const [gameSpeed, setGameSpeed] = useState<1 | 2 | 3>(1);
+
+  // Eco Gain & Payout Animations State
+  const [ecoProgress, setEcoProgress] = useState<number>(0);
+  const [ecoPulseKey, setEcoPulseKey] = useState<number>(0);
+  const [cashPulseKey, setCashPulseKey] = useState<number>(0);
+  const [ecoPopups, setEcoPopups] = useState<EcoPopupItem[]>([]);
 
   // Opponent State
   const [oppLives, setOppLives] = useState<number>(150);
-  const [oppCash, setOppCash] = useState<number>(650);
+  const [oppCash, setOppCash] = useState<number>(700);
   const [oppEco, setOppEco] = useState<number>(250);
 
   // Player Towers & Selection
@@ -141,8 +165,14 @@ export const PvPView: React.FC<PvPViewProps> = ({
   oppEcoRef.current = oppEco;
   const roundRef = useRef<number>(round);
   roundRef.current = round;
+  const gameSpeedRef = useRef<1 | 2 | 3>(gameSpeed);
+  gameSpeedRef.current = gameSpeed;
   const matchResultRef = useRef(matchResult);
   matchResultRef.current = matchResult;
+
+  const simClockRef = useRef<number>(0);
+  const playerWaveQueueRef = useRef<PendingBloonSpawn[]>([]);
+  const oppWaveQueueRef = useRef<PendingBloonSpawn[]>([]);
 
   const autoSendSpecIdRef = useRef<string | null>(autoSendSpecId);
   autoSendSpecIdRef.current = autoSendSpecId;
@@ -166,6 +196,7 @@ export const PvPView: React.FC<PvPViewProps> = ({
   const oppBloonBoostTimerRef = useRef<number>(0);
 
   const hoverPointRef = useRef<Point | null>(null);
+  const uniqueSeqRef = useRef<number>(1);
   const fullDeckIds = [playerHero, ...playerLoadout];
 
   const showToast = (msg: string) => {
@@ -173,6 +204,23 @@ export const PvPView: React.FC<PvPViewProps> = ({
     setTimeout(() => {
       setStatusToast((prev) => (prev === msg ? null : prev));
     }, 2400);
+  };
+
+  const spawnEcoPopup = (text: string, kind: 'eco' | 'payout' | 'loss') => {
+    const id = `ep_${++uniqueSeqRef.current}`;
+    setEcoPopups((prev) => [...prev.slice(-4), { id, text, kind }]);
+    setTimeout(() => {
+      setEcoPopups((prev) => prev.filter((p) => p.id !== id));
+    }, 1150);
+  };
+
+  const handleSetGameSpeed = (spd: 1 | 2 | 3) => {
+    gameSpeedRef.current = spd;
+    setGameSpeed(spd);
+    if (!isAiPractice && wsRef?.current?.readyState === WebSocket.OPEN) {
+      wsRef.current.send(JSON.stringify({ type: 'speed_change', speed: spd }));
+    }
+    showToast(`Match speed set to ${spd}x`);
   };
 
   // Immediately broadcast our board state to our opponent (called on tower actions & periodically)
@@ -217,20 +265,22 @@ export const PvPView: React.FC<PvPViewProps> = ({
             setOppCash(msg.senderCash);
           }
 
-          // Spawn incoming opponent rush on Player's Left Canvas
+          // Queue incoming opponent rush on Player's Left Canvas using simulation clock
+          const baseT = simClockRef.current;
           for (let i = 0; i < cnt; i++) {
-            setTimeout(() => {
-              if (playerBloonsRef.current.length < 450) {
-                playerBloonsRef.current.push(
-                  createActiveBloon(bType, 0, 0, map, {
-                    camo: Boolean(msg.camo),
-                    regrow: Boolean(msg.regrow),
-                    fortified: Boolean(msg.fortified),
-                  })
-                );
-              }
-            }, i * spacing * 1000);
+            playerWaveQueueRef.current.push({
+              spawnAt: baseT + i * spacing,
+              type: bType,
+              camo: Boolean(msg.camo),
+              regrow: Boolean(msg.regrow),
+              fortified: Boolean(msg.fortified),
+            });
           }
+        } else if (msg.type === 'match_speed_changed') {
+          const spd = ([1, 2, 3].includes(Number(msg.speed)) ? Number(msg.speed) : 1) as 1 | 2 | 3;
+          gameSpeedRef.current = spd;
+          setGameSpeed(spd);
+          showToast(`${msg.playerName || 'Opponent'} set speed to ${spd}x`);
         } else if (msg.type === 'opponent_board_sync') {
           if (typeof msg.lives === 'number') {
             oppLivesRef.current = msg.lives;
@@ -298,30 +348,24 @@ export const PvPView: React.FC<PvPViewProps> = ({
 
   const spawnNaturalWaveOnBothBoards = (r: number) => {
     const groups = generateRoundWaves(r, false);
+    const baseT = simClockRef.current;
     for (const grp of groups) {
       for (let i = 0; i < grp.count; i++) {
-        const delayMs = (grp.delay + i * grp.spacing) * 1000;
-        setTimeout(() => {
-          if (matchResultRef.current) return;
-          if (playerBloonsRef.current.length < 450) {
-            playerBloonsRef.current.push(
-              createActiveBloon(grp.type, 0, 0, map, {
-                camo: grp.camo,
-                regrow: grp.regrow,
-                fortified: grp.fortified,
-              })
-            );
-          }
-          if (oppBloonsRef.current.length < 450) {
-            oppBloonsRef.current.push(
-              createActiveBloon(grp.type, 0, 0, map, {
-                camo: grp.camo,
-                regrow: grp.regrow,
-                fortified: grp.fortified,
-              })
-            );
-          }
-        }, delayMs);
+        const spawnAt = baseT + grp.delay + i * grp.spacing;
+        playerWaveQueueRef.current.push({
+          spawnAt,
+          type: grp.type,
+          camo: grp.camo,
+          regrow: grp.regrow,
+          fortified: grp.fortified,
+        });
+        oppWaveQueueRef.current.push({
+          spawnAt,
+          type: grp.type,
+          camo: grp.camo,
+          regrow: grp.regrow,
+          fortified: grp.fortified,
+        });
       }
     }
   };
@@ -355,6 +399,13 @@ export const PvPView: React.FC<PvPViewProps> = ({
     const nextEco = Math.max(50, +(ecoRef.current + sendSpec.ecoChange).toFixed(1));
     ecoRef.current = nextEco;
     setEco(nextEco);
+
+    if (sendSpec.ecoChange > 0) {
+      setEcoPulseKey((k) => k + 1);
+      spawnEcoPopup(`+${sendSpec.ecoChange.toFixed(1)} ▲`, 'eco');
+    } else if (sendSpec.ecoChange < 0) {
+      spawnEcoPopup(`-${Math.abs(sendSpec.ecoChange)} ▼`, 'loss');
+    }
 
     const newItem: QueuedBloonSendItem = {
       queueId: `sq_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
@@ -407,16 +458,64 @@ export const PvPView: React.FC<PvPViewProps> = ({
     let pendingOppCash = 0;
 
     const loop = (now: number) => {
-      const dt = Math.min(0.05, (now - lastTime) / 1000);
+      const rawDt = Math.min(0.05, (now - lastTime) / 1000);
       lastTime = now;
+      const speedMult = gameSpeedRef.current;
+      const dt = rawDt * speedMult;
 
       if (!matchResultRef.current) {
+        simClockRef.current += dt;
+        const simNow = simClockRef.current;
+
+        // 0. Drain dt-driven natural waves & incoming opponent/AI bloon spawns
+        if (playerWaveQueueRef.current.length > 0) {
+          const remaining: PendingBloonSpawn[] = [];
+          for (let i = 0; i < playerWaveQueueRef.current.length; i++) {
+            const item = playerWaveQueueRef.current[i];
+            if (item.spawnAt <= simNow) {
+              if (playerBloonsRef.current.length < 450) {
+                playerBloonsRef.current.push(
+                  createActiveBloon(item.type, 0, 0, map, {
+                    camo: item.camo,
+                    regrow: item.regrow,
+                    fortified: item.fortified,
+                  })
+                );
+              }
+            } else {
+              remaining.push(item);
+            }
+          }
+          playerWaveQueueRef.current = remaining;
+        }
+
+        if (oppWaveQueueRef.current.length > 0) {
+          const remaining: PendingBloonSpawn[] = [];
+          for (let i = 0; i < oppWaveQueueRef.current.length; i++) {
+            const item = oppWaveQueueRef.current[i];
+            if (item.spawnAt <= simNow) {
+              if (oppBloonsRef.current.length < 450) {
+                oppBloonsRef.current.push(
+                  createActiveBloon(item.type, 0, 0, map, {
+                    camo: item.camo,
+                    regrow: item.regrow,
+                    fortified: item.fortified,
+                  })
+                );
+              }
+            } else {
+              remaining.push(item);
+            }
+          }
+          oppWaveQueueRef.current = remaining;
+        }
+
         // 1. Drain Player's Outgoing Send Queue onto Opponent's Board!
         if (playerSendQueueRef.current.length > 0) {
           const head = playerSendQueueRef.current[0];
           sendDrainTimer += dt;
-          if (sendDrainTimer >= head.sendSpec.spacing) {
-            sendDrainTimer = 0;
+          while (sendDrainTimer >= head.sendSpec.spacing && head.remainingCount > 0) {
+            sendDrainTimer -= head.sendSpec.spacing;
             if (oppBloonsRef.current.length < 450) {
               oppBloonsRef.current.push(
                 createActiveBloon(head.sendSpec.bloonType, 0, 0, map, {
@@ -427,13 +526,14 @@ export const PvPView: React.FC<PvPViewProps> = ({
               );
             }
             head.remainingCount -= 1;
-            if (head.remainingCount <= 0) {
-              const nextQ = playerSendQueueRef.current.slice(1);
-              playerSendQueueRef.current = nextQ;
-              setPlayerSendQueue(nextQ);
-            } else {
-              setPlayerSendQueue([...playerSendQueueRef.current]);
-            }
+          }
+          if (head.remainingCount <= 0) {
+            const nextQ = playerSendQueueRef.current.slice(1);
+            playerSendQueueRef.current = nextQ;
+            setPlayerSendQueue(nextQ);
+            sendDrainTimer = 0;
+          } else {
+            setPlayerSendQueue([...playerSendQueueRef.current]);
           }
         }
 
@@ -452,22 +552,27 @@ export const PvPView: React.FC<PvPViewProps> = ({
           }
         }
 
-        // 3. Battles 2 Eco Payout every 6.0 seconds
+        // 3. Battles 2 Eco Payout every 5.0 seconds (scaled by 1x/2x/3x speed)
         ecoTimer += dt;
-        if (ecoTimer >= 6.0) {
-          ecoTimer = 0;
-          cashRef.current += Math.round(ecoRef.current);
+        if (ecoTimer >= ECO_INTERVAL_SEC) {
+          ecoTimer -= ECO_INTERVAL_SEC;
+          const payout = Math.round(ecoRef.current);
+          cashRef.current += payout;
           setCash(cashRef.current);
+          setCashPulseKey((k) => k + 1);
+          setEcoPulseKey((k) => k + 1);
+          spawnEcoPopup(`+$${payout} ECO!`, 'payout');
+          soundFX.playEcoPayout();
           if (isAiPractice) {
             oppCashRef.current += Math.round(oppEcoRef.current);
             setOppCash(oppCashRef.current);
           }
         }
 
-        // 4. Round Progression every 22 seconds
+        // 4. Round Progression every 15 seconds (scaled by 1x/2x/3x speed)
         roundTimer += dt;
-        if (roundTimer >= 22.0) {
-          roundTimer = 0;
+        if (roundTimer >= ROUND_INTERVAL_SEC) {
+          roundTimer -= ROUND_INTERVAL_SEC;
           const nextR = Math.min(maxRound, roundRef.current + 1);
           roundRef.current = nextR;
           setRound(nextR);
@@ -481,98 +586,109 @@ export const PvPView: React.FC<PvPViewProps> = ({
           towerBoostTimerRef.current = Math.max(0, towerBoostTimerRef.current - dt);
         }
 
-        // 5. Step Player Simulation (Left Canvas)
-        const pRes = stepGameSimulation(
-          {
-            map,
-            towers: towersRef.current,
-            bloons: playerBloonsRef.current,
-            projectiles: playerProjRef.current,
-            effects: playerFxRef.current,
-            removedObstacleIds: [],
-            round: roundRef.current,
-            speedMultiplier: 1.0,
-            bloonBoostActive: oppBloonBoostTimerRef.current > 0,
-            towerBoostActive: towerBoostTimerRef.current > 0,
-            envTimer: pEnvTimer,
-          },
-          dt,
-          true
-        );
-        pEnvTimer = pRes.newEnvTimer;
-        pendingPlayerCash += pRes.cashEarned;
+        // Sub-step simulation at 2x / 3x speed so fast bloons & projectiles never tunnel
+        const subSteps = speedMult;
+        const subDt = dt / subSteps;
 
-        if (pRes.livesLost > 0) {
-          const nextL = Math.max(0, livesRef.current - pRes.livesLost);
-          livesRef.current = nextL;
-          setLives(nextL);
-          if (nextL <= 0 && !matchResultRef.current) {
-            setMatchResult({ winner: 'opponent', reason: 'Your defenses were overrun!' });
-            if (!isAiPractice && wsRef?.current?.readyState === WebSocket.OPEN) {
-              wsRef.current.send(
-                JSON.stringify({
-                  type: 'match_over',
-                  winnerId: 'opponent',
-                  reason: `${playerName}'s lives dropped to 0!`,
-                })
-              );
+        for (let s = 0; s < subSteps; s++) {
+          // 5. Step Player Simulation (Left Canvas)
+          const pRes = stepGameSimulation(
+            {
+              map,
+              towers: towersRef.current,
+              bloons: playerBloonsRef.current,
+              projectiles: playerProjRef.current,
+              effects: playerFxRef.current,
+              removedObstacleIds: [],
+              round: roundRef.current,
+              speedMultiplier: speedMult,
+              bloonBoostActive: oppBloonBoostTimerRef.current > 0,
+              towerBoostActive: towerBoostTimerRef.current > 0,
+              envTimer: pEnvTimer,
+              isPvP: true,
+            },
+            subDt,
+            s === 0
+          );
+          pEnvTimer = pRes.newEnvTimer;
+          pendingPlayerCash += pRes.cashEarned;
+
+          if (pRes.livesLost > 0) {
+            const nextL = Math.max(0, livesRef.current - pRes.livesLost);
+            livesRef.current = nextL;
+            setLives(nextL);
+            if (nextL <= 0 && !matchResultRef.current) {
+              setMatchResult({ winner: 'opponent', reason: 'Your defenses were overrun!' });
+              if (!isAiPractice && wsRef?.current?.readyState === WebSocket.OPEN) {
+                wsRef.current.send(
+                  JSON.stringify({
+                    type: 'match_over',
+                    winnerId: 'opponent',
+                    reason: `${playerName}'s lives dropped to 0!`,
+                  })
+                );
+              }
+            }
+          }
+
+          // 6. Step Opponent Simulation (Right Canvas) at 60FPS in BOTH AI Practice and 1v1 Multiplayer!
+          const oRes = stepGameSimulation(
+            {
+              map,
+              towers: oppTowersRef.current,
+              bloons: oppBloonsRef.current,
+              projectiles: oppProjRef.current,
+              effects: oppFxRef.current,
+              removedObstacleIds: [],
+              round: roundRef.current,
+              speedMultiplier: speedMult,
+              bloonBoostActive: bloonBoostTimerRef.current > 0,
+              towerBoostActive: oppTowerBoostTimerRef.current > 0,
+              envTimer: oEnvTimer,
+              isPvP: true,
+            },
+            subDt,
+            false
+          );
+          oEnvTimer = oRes.newEnvTimer;
+
+          if (isAiPractice) {
+            pendingOppCash += oRes.cashEarned;
+
+            if (oRes.livesLost > 0) {
+              const nextOppL = Math.max(0, oppLivesRef.current - oRes.livesLost);
+              oppLivesRef.current = nextOppL;
+              setOppLives(nextOppL);
+              if (nextOppL <= 0 && !matchResultRef.current) {
+                setMatchResult({
+                  winner: 'self',
+                  reason: `${opponentName} leaked too many Bloons!`,
+                });
+              }
             }
           }
         }
 
-        // 6. Step Opponent Simulation (Right Canvas) at 60FPS in BOTH AI Practice and 1v1 Multiplayer!
-        const oRes = stepGameSimulation(
-          {
-            map,
-            towers: oppTowersRef.current,
-            bloons: oppBloonsRef.current,
-            projectiles: oppProjRef.current,
-            effects: oppFxRef.current,
-            removedObstacleIds: [],
-            round: roundRef.current,
-            speedMultiplier: 1.0,
-            bloonBoostActive: bloonBoostTimerRef.current > 0,
-            towerBoostActive: oppTowerBoostTimerRef.current > 0,
-            envTimer: oEnvTimer,
-          },
-          dt,
-          false
-        );
-        oEnvTimer = oRes.newEnvTimer;
-
         if (isAiPractice) {
-          pendingOppCash += oRes.cashEarned;
-
-          if (oRes.livesLost > 0) {
-            const nextOppL = Math.max(0, oppLivesRef.current - oRes.livesLost);
-            oppLivesRef.current = nextOppL;
-            setOppLives(nextOppL);
-            if (nextOppL <= 0 && !matchResultRef.current) {
-              setMatchResult({
-                winner: 'self',
-                reason: `${opponentName} leaked too many Bloons!`,
-              });
-            }
-          }
-
           aiActionTimer += dt;
-          if (aiActionTimer >= 2.8) {
+          if (aiActionTimer >= 2.6) {
             aiActionTimer = 0;
             runAiDecisionTick();
           }
         } else {
-          // Real-time 1v1 Multiplayer Sync (~7Hz continuous + immediate on tower actions)
-          wsSyncTimer += dt;
+          // Real-time 1v1 Multiplayer Sync (~7Hz real-time continuous + immediate on tower actions)
+          wsSyncTimer += rawDt;
           if (wsSyncTimer >= 0.15) {
             wsSyncTimer = 0;
             broadcastBoardSync();
           }
         }
 
-        // Throttled HUD Cash & Boost Sync (10Hz) so React never slows down dense waves
-        hudSyncTimer += dt;
+        // Throttled HUD Cash, Eco Bar & Boost Sync (10Hz real-time)
+        hudSyncTimer += rawDt;
         if (hudSyncTimer >= 0.1) {
           hudSyncTimer = 0;
+          setEcoProgress(Math.min(100, Math.round((ecoTimer / ECO_INTERVAL_SEC) * 100)));
           setBloonBoostTimer(bloonBoostTimerRef.current);
           setTowerBoostTimer(towerBoostTimerRef.current);
           if (pendingPlayerCash > 0) {
@@ -704,9 +820,9 @@ export const PvPView: React.FC<PvPViewProps> = ({
       }
     }
 
-    // AI sends bloons to Player's board (Not added to Player's middle send queue!)
+    // AI sends bloons to Player's board via dt-driven wave queue
     const unlockedSends = PVP_BLOON_SENDS.filter((s) => s.unlockRound <= r && s.cost <= aiCash);
-    if (unlockedSends.length > 0 && Math.random() < 0.65) {
+    if (unlockedSends.length > 0 && Math.random() < 0.72) {
       const choice =
         unlockedSends[
           Math.min(unlockedSends.length - 1, Math.floor(Math.random() * unlockedSends.length))
@@ -716,17 +832,15 @@ export const PvPView: React.FC<PvPViewProps> = ({
       oppEcoRef.current = Math.max(100, +(oppEcoRef.current + choice.ecoChange).toFixed(1));
       setOppEco(oppEcoRef.current);
 
+      const baseT = simClockRef.current;
       for (let i = 0; i < choice.count; i++) {
-        setTimeout(() => {
-          if (matchResultRef.current || playerBloonsRef.current.length >= 450) return;
-          playerBloonsRef.current.push(
-            createActiveBloon(choice.bloonType, 0, 0, map, {
-              camo: r >= 12 && Math.random() < 0.25,
-              regrow: r >= 9 && Math.random() < 0.25,
-              fortified: r >= 18 && Math.random() < 0.3,
-            })
-          );
-        }, i * choice.spacing * 1000);
+        playerWaveQueueRef.current.push({
+          spawnAt: baseT + i * choice.spacing,
+          type: choice.bloonType,
+          camo: r >= 12 && Math.random() < 0.25,
+          regrow: r >= 9 && Math.random() < 0.25,
+          fortified: r >= 18 && Math.random() < 0.3,
+        });
       }
     }
   };
@@ -843,8 +957,14 @@ export const PvPView: React.FC<PvPViewProps> = ({
           </div>
         </div>
 
-        <div className="flex items-center gap-4 bg-[#5c2c12] px-4 py-1 rounded-xl border-2 border-[#3b1b0a] shadow">
-          <div className="flex items-center gap-1.5">
+        <div className="relative flex items-center gap-3 bg-[#5c2c12] px-3.5 py-1 rounded-xl border-2 border-[#3b1b0a] shadow">
+          {/* Cash Badge with Payout Pulse */}
+          <div
+            key={`cash-${cashPulseKey}`}
+            className={`flex items-center gap-1.5 rounded-lg px-1.5 py-0.5 ${
+              cashPulseKey > 0 ? 'animate-eco-pulse' : ''
+            }`}
+          >
             <span className="w-5 h-5 rounded-full bg-amber-400 border border-amber-950 flex items-center justify-center text-[11px] font-bold text-amber-950">
               $
             </span>
@@ -853,15 +973,73 @@ export const PvPView: React.FC<PvPViewProps> = ({
             </span>
           </div>
 
-          <div className="flex items-center gap-1" title="Eco income received every 6 seconds">
-            <span className="font-display font-bold text-lg text-[#4ade80] btd-text-stroke-sm font-mono-num">
-              {Math.round(eco)}
-            </span>
-            <span className="text-[#4ade80] text-xs font-bold btd-text-stroke-sm">▲</span>
+          {/* Eco Badge with Live Payout Timer Bar, Glow Pulse & Floating Popups */}
+          <div className="relative">
+            <div
+              key={`eco-${ecoPulseKey}`}
+              className={`flex flex-col items-center rounded-lg px-2 py-0.5 bg-black/25 border border-emerald-500/30 ${
+                ecoPulseKey > 0 ? 'animate-eco-pulse' : ''
+              }`}
+              title={`Eco income received every ${ECO_INTERVAL_SEC} seconds`}
+            >
+              <div className="flex items-center gap-1">
+                <span className="font-display font-bold text-base text-[#4ade80] btd-text-stroke-sm font-mono-num leading-none">
+                  {Math.round(eco)}
+                </span>
+                <span className="text-[#4ade80] text-xs font-bold btd-text-stroke-sm leading-none">
+                  ▲
+                </span>
+              </div>
+              <div className="w-full h-1 rounded-full bg-black/50 overflow-hidden mt-0.5">
+                <div
+                  className="h-full bg-gradient-to-r from-emerald-400 to-lime-300 transition-all duration-100"
+                  style={{ width: `${ecoProgress}%` }}
+                />
+              </div>
+            </div>
+
+            {/* Floating Eco Gain & Payout Animations */}
+            <div className="pointer-events-none absolute top-full left-1/2 z-50">
+              {ecoPopups.map((p) => (
+                <div
+                  key={p.id}
+                  className={`animate-eco-float whitespace-nowrap font-display font-bold text-xs px-2 py-0.5 rounded-full border shadow-lg mt-1 ${
+                    p.kind === 'payout'
+                      ? 'bg-emerald-500 border-amber-200 text-slate-950'
+                      : p.kind === 'eco'
+                        ? 'bg-lime-400 border-white text-slate-950'
+                        : 'bg-red-600 border-red-200 text-white'
+                  }`}
+                >
+                  {p.text}
+                </div>
+              ))}
+            </div>
           </div>
 
-          <div className="font-display font-bold text-base text-white uppercase tracking-wide btd-text-stroke-sm px-2">
+          <div className="font-display font-bold text-sm text-white uppercase tracking-wide btd-text-stroke-sm px-1">
             ROUND {round}/{maxRound}
+          </div>
+
+          {/* 1x / 2x / 3x Match Speed Controls */}
+          <div
+            className="flex items-center gap-0.5 bg-[#361607] p-0.5 rounded-lg border border-[#240d04]"
+            title="Match Speed (1x / 2x / 3x)"
+          >
+            <FastForward className="w-3.5 h-3.5 text-amber-300 mx-1 shrink-0" />
+            {PVP_SPEED_OPTIONS.map((spd) => (
+              <button
+                key={spd}
+                onClick={() => handleSetGameSpeed(spd)}
+                className={`px-2 py-0.5 rounded-md font-display font-bold text-xs transition-colors ${
+                  gameSpeed === spd
+                    ? 'bg-amber-400 text-slate-950 shadow'
+                    : 'text-amber-100/80 hover:text-white'
+                }`}
+              >
+                {spd}x
+              </button>
+            ))}
           </div>
 
           <div className="flex items-center gap-1">
@@ -908,7 +1086,7 @@ export const PvPView: React.FC<PvPViewProps> = ({
             </div>
 
             <div className="flex-1 flex flex-col gap-2 overflow-y-auto">
-              {fullDeckIds.map((specId) => {
+              {fullDeckIds.map((specId, idx) => {
                 const spec = TOWER_SPEC_MAP[specId];
                 if (!spec) return null;
                 const canAfford = cash >= spec.cost;
@@ -916,20 +1094,26 @@ export const PvPView: React.FC<PvPViewProps> = ({
 
                 return (
                   <button
-                    key={spec.id}
+                    key={`${spec.id}_${idx}`}
                     onClick={() => {
                       setSelectedShopSpecId(isSelected ? null : spec.id);
                       setSelectedTowerId(null);
                     }}
-                    className={`rounded-xl p-1.5 flex flex-col items-center justify-between border-2 transition-transform active:scale-95 ${
+                    title={`${spec.name}: ${spec.description}`}
+                    className={`relative rounded-xl p-1.5 flex flex-col items-center justify-between border-2 transition-transform active:scale-95 ${
                       isSelected
                         ? 'bg-amber-200 border-yellow-400 ring-2 ring-yellow-300'
                         : 'bg-[#d6cbb9] hover:bg-[#e5dccb] border-[#5c2c12]'
                     }`}
                   >
+                    {spec.waterOnly && (
+                      <span className="absolute top-1 right-1 text-[8px] font-bold px-1 rounded bg-sky-900/90 text-sky-200">
+                        H2O
+                      </span>
+                    )}
                     <TowerPortraitIcon specId={spec.id} size={46} />
                     <span className="text-[10px] font-display font-bold text-slate-900 truncate w-full text-center">
-                      {spec.name.split(' ')[0]}
+                      {getTowerShortName(spec)}
                     </span>
                     <div className="w-full rounded bg-[#4a210d] px-1 py-0.5 flex items-center justify-center gap-1">
                       <span className="w-3 h-3 rounded-full bg-amber-400 text-[8px] font-bold text-slate-950 flex items-center justify-center">
@@ -1023,7 +1207,7 @@ export const PvPView: React.FC<PvPViewProps> = ({
                 if (!item) {
                   return (
                     <div
-                      key={slotIdx}
+                      key={`empty_${slotIdx}`}
                       className="flex-1 rounded-lg bg-black/20 border border-[#5c2c12]/60 flex items-center justify-center"
                     />
                   );

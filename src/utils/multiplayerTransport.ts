@@ -517,6 +517,21 @@ export class ServerlessPartySocket {
         break;
       }
 
+      case 'speed_change': {
+        const spd = [1, 2, 3].includes(Number(msg.speed)) ? Number(msg.speed) : 1;
+        this.broadcastFromHost(
+          room,
+          {
+            type: 'match_speed_changed',
+            fromPlayerId: senderId,
+            playerName: sender.name,
+            speed: spd,
+          },
+          senderId
+        );
+        break;
+      }
+
       case 'match_over': {
         room.status = 'finished';
         this.broadcastFromHost(room, {

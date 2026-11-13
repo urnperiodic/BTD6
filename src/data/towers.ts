@@ -5,6 +5,7 @@ export const TOWER_SPECS: TowerSpec[] = [
   {
     id: 'hero_quincy',
     name: 'Quincy (Cyber Archer)',
+    shortName: 'Quincy',
     category: 'Hero',
     cost: 540,
     range: 145,
@@ -48,6 +49,7 @@ export const TOWER_SPECS: TowerSpec[] = [
   {
     id: 'hero_gwen',
     name: 'Gwendolin (Pyromancer)',
+    shortName: 'Gwendolin',
     category: 'Hero',
     cost: 720,
     range: 115,
@@ -93,6 +95,7 @@ export const TOWER_SPECS: TowerSpec[] = [
   {
     id: 'dart_monkey',
     name: 'Dart Monkey',
+    shortName: 'Dart',
     category: 'Primary',
     cost: 200,
     range: 110,
@@ -136,6 +139,7 @@ export const TOWER_SPECS: TowerSpec[] = [
   {
     id: 'tack_shooter',
     name: 'Tack Shooter',
+    shortName: 'Tack',
     category: 'Primary',
     cost: 280,
     range: 85,
@@ -179,19 +183,21 @@ export const TOWER_SPECS: TowerSpec[] = [
   {
     id: 'bomb_shooter',
     name: 'Bomb Shooter',
+    shortName: 'Bomb',
     category: 'Primary',
-    cost: 525,
-    range: 125,
-    fireCooldown: 1.25,
+    cost: 475,
+    range: 128,
+    fireCooldown: 1.15,
     damage: 2,
     pierce: 14,
-    projectileSpeed: 390,
+    projectileSpeed: 410,
     projectilesCount: 1,
     spreadAngle: 0,
     damageType: 'explosive',
     canDetectCamo: false,
     waterOnly: false,
     footprintRadius: 17,
+    splashRadius: 28,
     color: '#1e293b',
     secondaryColor: '#ef4444',
     description: 'Launches heavy bombs that explode in a splash radius and pop Lead Bloons.',
@@ -222,10 +228,11 @@ export const TOWER_SPECS: TowerSpec[] = [
   {
     id: 'ice_monkey',
     name: 'Ice Monkey',
+    shortName: 'Ice',
     category: 'Primary',
-    cost: 500,
-    range: 82,
-    fireCooldown: 1.6,
+    cost: 450,
+    range: 92,
+    fireCooldown: 1.35,
     damage: 1,
     pierce: 25,
     projectileSpeed: 600,
@@ -267,6 +274,7 @@ export const TOWER_SPECS: TowerSpec[] = [
   {
     id: 'sniper_monkey',
     name: 'Sniper Monkey',
+    shortName: 'Sniper',
     category: 'Military',
     cost: 350,
     range: 999, // Full map range!
@@ -310,13 +318,14 @@ export const TOWER_SPECS: TowerSpec[] = [
   {
     id: 'dartling_gunner',
     name: 'Dartling Gunner',
+    shortName: 'Dartling',
     category: 'Military',
-    cost: 800,
-    range: 260,
-    fireCooldown: 0.19,
+    cost: 780,
+    range: 270,
+    fireCooldown: 0.18,
     damage: 1,
     pierce: 1,
-    projectileSpeed: 680,
+    projectileSpeed: 760,
     projectilesCount: 1,
     spreadAngle: 0.22,
     damageType: 'sharp',
@@ -329,15 +338,15 @@ export const TOWER_SPECS: TowerSpec[] = [
     upgrades: [
       [
         { name: 'Focused Firing', cost: 300, description: 'Greatly reduces barrel spread and increases range.', rangeBonus: 50 },
-        { name: 'Laser Shock', cost: 800, description: 'Shots shock bloons for +1 extra damage.', damageBonus: 1 },
-        { name: 'Laser Cannon', cost: 3200, description: 'Converts to high-energy laser blasts.', damageTypeOverride: 'energy', damageBonus: 2, pierceBonus: 4 },
-        { name: 'Plasma Accelerator', cost: 9800, description: 'Continuous plasma beam melts MOABs and Lead.', damageTypeOverride: 'plasma', damageBonus: 6, moabDamageBonus: 18, fireRateMultiplier: 0.5 },
-        { name: 'Ray of Doom', cost: 58000, description: 'Permanent ultra-pierce laser beam vaporizes everything.', damageTypeOverride: 'normal', damageBonus: 35, pierceBonus: 80, moabDamageBonus: 55 },
+        { name: 'Laser Shock', cost: 750, description: 'Shots shock bloons for +1 extra damage.', damageBonus: 1 },
+        { name: 'Laser Cannon', cost: 2800, description: 'Converts to high-energy laser blasts.', damageTypeOverride: 'energy', damageBonus: 2, pierceBonus: 4 },
+        { name: 'Plasma Accelerator', cost: 9200, description: 'Continuous plasma beam melts MOABs and Lead.', damageTypeOverride: 'plasma', damageBonus: 6, moabDamageBonus: 18, fireRateMultiplier: 0.5 },
+        { name: 'Ray of Doom', cost: 52000, description: 'Permanent ultra-pierce laser beam vaporizes everything.', damageTypeOverride: 'normal', damageBonus: 35, pierceBonus: 80, moabDamageBonus: 55 },
       ],
       [
         { name: 'Advanced Targeting', cost: 250, description: 'Detects and pops Camo Bloons!', grantsCamo: true },
-        { name: 'Faster Barrel Spin', cost: 850, description: 'Fires 35% faster.', fireRateMultiplier: 0.65 },
-        { name: 'Hydra Rocket Pods', cost: 4800, description: 'Fires vicious plasma-tipped micro-rockets that pop ALL bloon types!', damageTypeOverride: 'normal', splashRadius: 36, damageBonus: 2, pierceBonus: 5 },
+        { name: 'Faster Barrel Spin', cost: 800, description: 'Fires 35% faster.', fireRateMultiplier: 0.65 },
+        { name: 'Hydra Rocket Pods', cost: 4200, description: 'Fires vicious plasma-tipped micro-rockets that pop ALL bloon types!', damageTypeOverride: 'normal', splashRadius: 36, damageBonus: 2, pierceBonus: 5 },
         { name: 'Rocket Storm', cost: 5600, description: 'Wider rocket explosions + Rocket Storm ability.', damageBonus: 2, abilityName: 'Rocket Storm', abilityCooldown: 25, abilityDescription: 'Fires wave of 60 missiles!' },
         { name: 'M.A.D.', cost: 46000, description: 'Mega Anti-Dirigible rockets deal +450 damage to MOAB-class bloons!', moabDamageBonus: 450, damageBonus: 5 },
       ],
@@ -353,10 +362,11 @@ export const TOWER_SPECS: TowerSpec[] = [
   {
     id: 'monkey_sub',
     name: 'Monkey Sub (Water)',
+    shortName: 'Sub',
     category: 'Military',
     cost: 325,
-    range: 130,
-    fireCooldown: 0.68,
+    range: 135,
+    fireCooldown: 0.62,
     damage: 1,
     pierce: 2,
     projectileSpeed: 520,
@@ -396,10 +406,11 @@ export const TOWER_SPECS: TowerSpec[] = [
   {
     id: 'monkey_buccaneer',
     name: 'Monkey Buccaneer (Water)',
+    shortName: 'Buccaneer',
     category: 'Military',
-    cost: 450,
-    range: 145,
-    fireCooldown: 0.85,
+    cost: 425,
+    range: 150,
+    fireCooldown: 0.78,
     damage: 2,
     pierce: 4,
     projectileSpeed: 540,
@@ -441,6 +452,7 @@ export const TOWER_SPECS: TowerSpec[] = [
   {
     id: 'wizard_monkey',
     name: 'Wizard Monkey',
+    shortName: 'Wizard',
     category: 'Magic',
     cost: 375,
     range: 125,
@@ -467,7 +479,7 @@ export const TOWER_SPECS: TowerSpec[] = [
       ],
       [
         { name: 'Fireball', cost: 300, description: 'Hurls explosive fireballs that pop Lead.', damageTypeOverride: 'fire', splashRadius: 30, damageBonus: 1 },
-        { name: 'Wall of Fire', cost: 850, description: 'Scorches the track with persistent flames.', pierceBonus: 6, damageBonus: 2 },
+        { name: 'Wall of Fire', cost: 850, description: 'Scorches the track with persistent flames.', splashRadius: 36, fireRateMultiplier: 0.85, pierceBonus: 6, damageBonus: 2 },
         { name: 'Dragon\'s Breath', cost: 3000, description: 'Spews a rapid stream of white-hot dragon fire!', fireRateMultiplier: 0.28, damageBonus: 2 },
         { name: 'Summon Phoenix', cost: 4800, description: 'Unlocks Phoenix flight ability.', damageBonus: 3, abilityName: 'Summon Phoenix', abilityCooldown: 25, abilityDescription: 'Flaming Phoenix scorches the screen!' },
         { name: 'Wizard Lord Phoenix', cost: 38000, description: 'Transforms into an immortal Lava Phoenix.', damageTypeOverride: 'normal', projectilesBonus: 4, damageBonus: 15, moabDamageBonus: 35 },
@@ -484,12 +496,13 @@ export const TOWER_SPECS: TowerSpec[] = [
   {
     id: 'super_monkey',
     name: 'Super Monkey',
+    shortName: 'Super',
     category: 'Magic',
-    cost: 2500,
-    range: 155,
-    fireCooldown: 0.08, // Shoots hyper-fast!
+    cost: 2450,
+    range: 158,
+    fireCooldown: 0.075, // Shoots hyper-fast!
     damage: 1,
-    pierce: 1,
+    pierce: 2,
     projectileSpeed: 760,
     projectilesCount: 1,
     spreadAngle: 0.1,
@@ -502,8 +515,8 @@ export const TOWER_SPECS: TowerSpec[] = [
     description: 'Fires a hypersonic stream of darts. Upgrades into Sun Avatar, Robo Monkey, or Dark Champion!',
     upgrades: [
       [
-        { name: 'Laser Blasts', cost: 2000, description: 'Shoots lasers with +1 pierce.', damageTypeOverride: 'energy', pierceBonus: 1 },
-        { name: 'Plasma Blasts', cost: 3000, description: 'Vaporizes Lead and fires even faster!', damageTypeOverride: 'plasma', fireRateMultiplier: 0.7, damageBonus: 1 },
+        { name: 'Laser Blasts', cost: 1600, description: 'Shoots lasers with +1 pierce.', damageTypeOverride: 'energy', pierceBonus: 1 },
+        { name: 'Plasma Blasts', cost: 2400, description: 'Vaporizes Lead and fires even faster!', damageTypeOverride: 'plasma', fireRateMultiplier: 0.7, damageBonus: 1 },
         { name: 'Sun Avatar', cost: 16500, description: 'Fires 3 wide beams of pure solar plasma.', projectilesBonus: 2, pierceBonus: 4, damageBonus: 2 },
         { name: 'Sun Temple', cost: 48000, description: 'Golden temple of solar destruction.', damageTypeOverride: 'normal', damageBonus: 12, moabDamageBonus: 25, splashRadius: 48, rangeBonus: 50 },
         { name: 'True Sun God', cost: 95000, description: 'The ultimate incarnation of solar wrath.', damageBonus: 35, moabDamageBonus: 80, projectilesBonus: 2 },
@@ -527,6 +540,7 @@ export const TOWER_SPECS: TowerSpec[] = [
   {
     id: 'ninja_monkey',
     name: 'Ninja Monkey',
+    shortName: 'Ninja',
     category: 'Magic',
     cost: 425,
     range: 120,
@@ -570,6 +584,7 @@ export const TOWER_SPECS: TowerSpec[] = [
   {
     id: 'druid',
     name: 'Druid',
+    shortName: 'Druid',
     category: 'Magic',
     cost: 425,
     range: 110,
@@ -615,8 +630,9 @@ export const TOWER_SPECS: TowerSpec[] = [
   {
     id: 'banana_farm',
     name: 'Banana Farm',
+    shortName: 'Farm',
     category: 'Support',
-    cost: 1150,
+    cost: 1100,
     range: 75,
     fireCooldown: 999,
     damage: 0,
@@ -660,6 +676,7 @@ export const TOWER_SPECS: TowerSpec[] = [
   {
     id: 'spike_factory',
     name: 'Spike Factory',
+    shortName: 'Spactory',
     category: 'Support',
     cost: 950,
     range: 115,
@@ -704,6 +721,7 @@ export const TOWER_SPECS: TowerSpec[] = [
   {
     id: 'monkey_village',
     name: 'Monkey Village',
+    shortName: 'Village',
     category: 'Support',
     cost: 1150,
     range: 140,
@@ -752,6 +770,7 @@ export const TOWER_SPECS: TowerSpec[] = [
   {
     id: 'pontoon_platform',
     name: 'Portable Pontoon (Platform)',
+    shortName: 'Pontoon',
     category: 'Support',
     cost: 250,
     range: 42,
@@ -798,3 +817,15 @@ export const TOWER_SPECS: TowerSpec[] = [
 export const TOWER_SPEC_MAP: Record<string, TowerSpec> = Object.fromEntries(
   TOWER_SPECS.map((t) => [t.id, t])
 );
+
+export function getTowerShortName(spec: TowerSpec): string {
+  if (spec.shortName) return spec.shortName;
+  const cleaned = spec.name
+    .replace(' (Water)', '')
+    .replace(' (Platform)', '')
+    .replace(/^Monkey\s+/i, '')
+    .replace(/\s+Monkey$/i, '')
+    .trim();
+  return cleaned.split(' ')[0] || spec.name;
+}
+

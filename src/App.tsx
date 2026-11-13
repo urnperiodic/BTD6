@@ -7,7 +7,7 @@ import {
   SaveFileState,
 } from './types/game';
 import { PVE_MAPS, PVP_MAPS } from './data/maps';
-import { TOWER_SPECS, TOWER_SPEC_MAP } from './data/towers';
+import { TOWER_SPECS, TOWER_SPEC_MAP, getTowerShortName } from './data/towers';
 import { BLOON_SPECS } from './data/bloons';
 import { PvEView } from './components/PvEView';
 import { PvPView } from './components/PvPView';
@@ -906,7 +906,7 @@ export default function App() {
                           if (!sp) return null;
                           return (
                             <div
-                              key={id}
+                              key={`${id}_${idx}`}
                               className="rounded-xl bg-[#b86b43] border-2 border-yellow-300 p-1.5 flex flex-col items-center text-center"
                             >
                               <span className="text-[9px] font-bold uppercase text-amber-200">
@@ -914,7 +914,7 @@ export default function App() {
                               </span>
                               <TowerPortraitIcon specId={id} size={42} />
                               <span className="text-[10px] font-display font-bold text-white truncate w-full mt-0.5">
-                                {sp.name.split(' ')[0]}
+                                {getTowerShortName(sp)}
                               </span>
                               <span className="text-[10px] font-mono-num text-amber-300 font-bold">
                                 ${sp.cost}
@@ -932,15 +932,21 @@ export default function App() {
                             <button
                               key={sp.id}
                               onClick={() => toggleLoadoutMonkey(sp.id)}
-                              className={`rounded-lg p-1.5 flex flex-col items-center border transition-transform active:scale-95 ${
+                              title={`${sp.name}: ${sp.description}`}
+                              className={`relative rounded-lg p-1.5 flex flex-col items-center border transition-transform active:scale-95 ${
                                 inDeck
                                   ? 'bg-emerald-600/80 border-yellow-300 ring-1 ring-yellow-300'
                                   : 'bg-[#4a210d] hover:bg-[#5c2c12] border-[#361607]'
                               }`}
                             >
+                              {sp.waterOnly && (
+                                <span className="absolute top-0.5 right-0.5 text-[7px] font-bold px-1 rounded bg-sky-900/90 text-sky-200">
+                                  H2O
+                                </span>
+                              )}
                               <TowerPortraitIcon specId={sp.id} size={34} />
                               <span className="text-[9px] font-bold text-white truncate w-full text-center mt-0.5">
-                                {sp.name.split(' ')[0]}
+                                {getTowerShortName(sp)}
                               </span>
                               <span className="text-[8px] font-mono-num text-amber-300">
                                 {sp.category === 'Hero' ? 'HERO' : `$${sp.cost}`}
